@@ -46,4 +46,5 @@
 
 본 프로젝트는 별도의 서버 빌드 과정 없이, 브라우저에서 즉시 실행 가능한 Single Page Application(SPA)입니다.
 
-<img width="1920" height="899" alt="image" src="https://github.com/user-attachments/assets/ee89dfe0-7ad9-4447-a523-5a43610a396c" />
+<img width="1920" height="906" alt="image" src="https://github.com/user-attachments/assets/15a4d5f4-0b6e-4ab0-818c-1a5fc27784f2" />
+
