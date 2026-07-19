@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Decode & Chill - Lo-Fi Reversing Game</title>
+    
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome for cozy icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts: Inter (UI) & Fira Code (Debugger) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Fira+Code:wght@400;600&display=swap" rel="stylesheet">
+    
+    <!-- Tone.js for chill ambient music generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['Fira Code', 'monospace'],
+                    },
+                    colors: {
+                        pastel: {
+                            bg: '#FDFBF7', // 따뜻한 크림색 배경
+                            panel: '#F4EFE6', // 부드러운 패널 색상
+                            green: '#A3B18A', // 성공/칠한 녹색
+                            red: '#E07A5F',   // 부드러운 경고/에러
+                            blue: '#8ECAE6',  // 강조/정보
+                            text: '#3D405B',  // 진한 텍스트
+                            codeBg: '#E9E3D5' // 코드 뷰어 배경
+                        }
+                    },
+                    boxShadow: {
+                        'soft': '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #FDFBF7;
+            color: #3D405B;
+            overflow-x: hidden;
+        }
+        
+        /* 커스텀 스크롤바 */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #D5CDBA; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #A3B18A; }
+
+        /* 애니메이션 유틸리티 */
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        .slide-up { animation: slideUp 0.5s ease-out; }
+        .glitch-hover:hover { animation: glitch 0.2s linear infinite; }
+        
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse-soft { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        
+        .xray-blur { filter: blur(4px); transition: filter 0.3s; cursor: pointer; }
+        .xray-blur:hover { filter: blur(0px); }
+
+        /* 말풍선 꼬리 */
+        .chat-bubble::after {
+            content: ''; position: absolute; left: -10px; top: 15px;
+            border-width: 10px 15px 10px 0; border-color: transparent #F4EFE6 transparent transparent;
+            display: block; width: 0;
+        }
+
+        /* 슬라이더(볼륨) 스타일 */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 12px;
+            width: 12px;
+            border-radius: 50%;
+            background: #A3B18A;
+            cursor: pointer;
+            margin-top: -4px;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #E9E3D5;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col font-sans selection:bg-pastel-green selection:text-white">
+
+    <header class="w-full p-4 flex justify-between items-center bg-white/50 backdrop-blur-md shadow-sm z-10 sticky top-0">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-pastel-green rounded-xl flex items-center justify-center text-white shadow-soft">
+                <i class="fa-solid fa-mug-hot"></i>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold tracking-tight">Decode & Chill</h1>
+                <p class="text-xs opacity-70">Lo-Fi Reverse Engineering</p>
+            </div>
+        </div>
+        
+        <div class="flex items-center gap-6">
+            <!-- 단계 표시기 -->
+            <div class="flex gap-2" id="level-indicators">
+                <!-- JS에서 동적으로 생성됨 -->
+            </div>
+            
+            <!-- 음악 토글 & 볼륨 컨트롤 -->
+            <div class="flex items-center gap-3 bg-pastel-panel px-2 py-1.5 rounded-full pl-4">
+                <button id="bgm-toggle" class="hover:opacity-70 transition-opacity flex items-center gap-2 text-sm font-semibold text-pastel-text w-[120px]">
+                    <i class="fa-solid fa-music"></i> <span>Lo-Fi BGM: OFF</span>
+                </button>
+                <!-- 볼륨 슬라이더 (기본 숨김) -->
+                <div id="volume-control" class="hidden items-center gap-2 border-l border-gray-300 pl-3 pr-2">
+                    <i class="fa-solid fa-volume-low text-xs text-gray-500"></i>
+                    <input type="range" id="bgm-volume" min="0" max="100" value="60" class="w-16 h-1 bg-gray-300 rounded-lg appearance-none cursor-pointer">
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 flex gap-6 p-6 max-w-7xl mx-auto w-full h-full overflow-hidden">
+        
+        <!-- 좌측: 타겟 기기 (상호작용) -->
+        <section class="w-1/3 flex flex-col gap-4 slide-up" style="animation-delay: 0.1s;">
+            <div class="bg-white rounded-3xl p-6 shadow-soft flex-1 border border-gray-100 flex flex-col relative overflow-hidden">
+                <h2 class="text-lg font-bold mb-1 flex items-center gap-2"><i class="fa-solid fa-gamepad text-pastel-blue"></i> Target Device</h2>
+                <p class="text-sm opacity-70 mb-6">해킹 대상 시스템입니다.</p>
+                
+                <!-- 게임 뷰포트 -->
+                <div id="target-viewport" class="flex-1 bg-pastel-panel rounded-2xl p-6 flex flex-col items-center justify-center relative border-2 border-dashed border-gray-300">
+                    <!-- 레벨별 UI가 여기에 주입됨 -->
+                </div>
+            </div>
+        </section>
+
+        <!-- 중앙: 디버거 / 코드 뷰어 -->
+        <section class="w-1/3 flex flex-col gap-4 slide-up" style="animation-delay: 0.2s;">
+            <div class="bg-pastel-text text-gray-100 rounded-3xl p-6 shadow-soft flex-1 flex flex-col">
+                <div class="flex justify-between items-center mb-4 border-b border-gray-600 pb-2">
+                    <h2 class="text-lg font-bold flex items-center gap-2"><i class="fa-solid fa-bug text-pastel-red"></i> X-Ray Debugger</h2>
+                    <span class="text-xs font-mono bg-gray-700 px-2 py-1 rounded">v1.0.0</span>
+                </div>
+                
+                <!-- 코드 뷰포트 -->
+                <div id="debugger-viewport" class="flex-1 bg-gray-800 rounded-xl p-4 font-mono text-sm overflow-y-auto leading-relaxed whitespace-pre-wrap">
+                    <!-- 레벨별 코드가 여기에 주입됨 -->
+                </div>
+                
+                <!-- 디버거 컨트롤러 (5단계용) -->
+                <div id="debugger-controls" class="mt-4 flex justify-center gap-4 hidden">
+                    <button id="btn-pause" class="w-10 h-10 rounded-full bg-yellow-500 hover:bg-yellow-400 text-gray-900 flex items-center justify-center transition-transform hover:scale-110"><i class="fa-solid fa-pause"></i></button>
+                    <button id="btn-step" class="w-10 h-10 rounded-full bg-blue-400 hover:bg-blue-300 text-gray-900 flex items-center justify-center transition-transform hover:scale-110"><i class="fa-solid fa-forward-step"></i></button>
+                    <button id="btn-play" class="w-10 h-10 rounded-full bg-pastel-green hover:bg-green-400 text-gray-900 flex items-center justify-center transition-transform hover:scale-110"><i class="fa-solid fa-play"></i></button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 우측: AI 어시스턴트 (힌트) -->
+        <section class="w-1/3 flex flex-col gap-4 slide-up h-full" style="animation-delay: 0.3s;">
+            <div class="bg-white rounded-3xl p-6 shadow-soft flex-1 border border-gray-100 flex flex-col min-h-0">
+                <h2 class="text-lg font-bold mb-4 flex items-center gap-2 flex-shrink-0"><i class="fa-solid fa-robot text-pastel-green"></i> Byte (Helper Bot)</h2>
+                
+                <!-- 채팅 내역 -->
+                <div id="chat-history" class="flex-1 overflow-y-auto pr-2 flex flex-col gap-4">
+                    <!-- 시작 메시지 -->
+                    <div class="flex gap-3">
+                        <div class="w-8 h-8 rounded-full bg-pastel-green text-white flex flex-shrink-0 items-center justify-center mt-1"><i class="fa-solid fa-cat"></i></div>
+                        <div class="bg-pastel-panel p-3 rounded-2xl rounded-tl-none text-sm relative chat-bubble">
+                            안녕! 난 너의 리버싱 파트너 <b>Byte</b>야.<br>어려운 코드를 뜯어보는 건 나한테 맡겨!<br>준비됐으면 1단계부터 시작해볼까?
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 힌트 요청 버튼 -->
+                <div class="mt-4 pt-4 border-t border-gray-100 text-center flex-shrink-0">
+                    <button id="btn-hint" class="px-6 py-3 bg-white border-2 border-pastel-green text-pastel-green rounded-full font-bold hover:bg-pastel-green hover:text-white transition-all w-full flex items-center justify-center gap-2 shadow-sm">
+                        <i class="fa-regular fa-lightbulb"></i> 힌트가 필요해!
+                    </button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Custom Modal (replaces alert) -->
+    <div id="custom-modal" class="fixed inset-0 bg-pastel-text/40 backdrop-blur-sm z-50 hidden flex items-center justify-center opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl transform scale-95 transition-transform duration-300" id="modal-content">
+            <div id="modal-icon" class="text-5xl mb-4 text-center"></div>
+            <h2 id="modal-title" class="text-2xl font-bold text-center mb-2"></h2>
+            <p id="modal-desc" class="text-center text-gray-600 mb-6 leading-relaxed"></p>
+            <button id="btn-modal-close" class="w-full py-3 bg-pastel-green text-white rounded-xl font-bold hover:opacity-90 transition-opacity">계속하기</button>
+        </div>
+    </div>
+
+    <script>
+        // --- Audio Engine (Tone.js Lo-Fi Ambient) ---
+        let audioContextStarted = false;
+        let isPlaying = false;
+        let synth;
+        let loop;
+
+        async function initAudio() {
+            if (!audioContextStarted) {
+                await Tone.start();
+                audioContextStarted = true;
+                
+                // 따뜻하고 몽환적인 신디사이저 설정
+                synth = new Tone.PolySynth(Tone.Synth, {
+                    oscillator: { type: "sine" },
+                    envelope: { attack: 1.5, decay: 0.5, sustain: 1, release: 3 }
+                });
+                
+                const filter = new Tone.Filter(800, "lowpass");
+                const reverb = new Tone.Reverb({ decay: 5, wet: 0.6 });
+                const delay = new Tone.FeedbackDelay("8n", 0.4);
+                
+                synth.chain(filter, delay, reverb, Tone.Destination);
+                
+                // Lo-Fi 코드 진행 (Fmaj7 -> Em7 -> Dm7 -> Cmaj7 느낌)
+                const chords = [
+                    ["F3", "A3", "C4", "E4"],
+                    ["E3", "G3", "B3", "D4"],
+                    ["D3", "F3", "A3", "C4"],
+                    ["C3", "E3", "G3", "B3"]
+                ];
+                let step = 0;
+
+                loop = new Tone.Loop((time) => {
+                    synth.triggerAttackRelease(chords[step], "2n", time, 0.3);
+                    step = (step + 1) % chords.length;
+                }, "1m");
+                
+                Tone.Transport.bpm.value = 60; // 매우 느린 템포
+                
+                // 초기 볼륨 설정 적용
+                const volSlider = document.getElementById('bgm-volume');
+                updateVolume(volSlider.value);
+            }
+        }
+        
+        // 볼륨 업데이트 함수
+        function updateVolume(val) {
+            const volume = parseInt(val);
+            if (volume === 0) {
+                Tone.Destination.mute = true;
+            } else {
+                Tone.Destination.mute = false;
+                // 0~100 수치를 dB(-40 ~ 0)로 변환
+                Tone.Destination.volume.rampTo(20 * Math.log10(volume / 100), 0.1);
+            }
+        }
+
+        // 볼륨 슬라이더 이벤트 리스너
+        document.getElementById('bgm-volume').addEventListener('input', (e) => {
+            if (audioContextStarted) {
+                updateVolume(e.target.value);
+            }
+        });
+
+        document.getElementById('bgm-toggle').addEventListener('click', async (e) => {
+            const btn = e.currentTarget;
+            const volControl = document.getElementById('volume-control');
+            if (!isPlaying) {
+                await initAudio();
+                Tone.Transport.start();
+                loop.start(0);
+                isPlaying = true;
+                btn.innerHTML = '<i class="fa-solid fa-music text-pastel-green"></i> <span>Lo-Fi BGM: ON</span>';
+                // 음악 켤 때 슬라이더 표시
+                volControl.classList.remove('hidden');
+                volControl.classList.add('flex');
+            } else {
+                Tone.Transport.stop();
+                loop.stop();
+                isPlaying = false;
+                btn.innerHTML = '<i class="fa-solid fa-music"></i> <span>Lo-Fi BGM: OFF</span>';
+                // 음악 끌 때 슬라이더 숨김
+                volControl.classList.add('hidden');
+                volControl.classList.remove('flex');
+            }
+        });
+
+        // --- UI Helpers ---
+        const modal = document.getElementById('custom-modal');
+        const modalContent = document.getElementById('modal-content');
+        
+        function showModal(title, desc, type = 'success', callback = null) {
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-desc').innerHTML = desc; // allow HTML
+            
+            const iconEl = document.getElementById('modal-icon');
+            if (type === 'success') {
+                iconEl.innerHTML = '<i class="fa-solid fa-circle-check text-pastel-green"></i>';
+                document.getElementById('btn-modal-close').className = "w-full py-3 bg-pastel-green text-white rounded-xl font-bold hover:opacity-90 transition-opacity";
+            } else {
+                iconEl.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-pastel-red"></i>';
+                document.getElementById('btn-modal-close').className = "w-full py-3 bg-pastel-red text-white rounded-xl font-bold hover:opacity-90 transition-opacity";
+            }
+
+            modal.classList.remove('hidden');
+            // Trigger reflow
+            void modal.offsetWidth;
+            modal.classList.remove('opacity-0');
+            modalContent.classList.remove('scale-95');
+
+            document.getElementById('btn-modal-close').onclick = () => {
+                modal.classList.add('opacity-0');
+                modalContent.classList.add('scale-95');
+                setTimeout(() => {
+                    modal.classList.add('hidden');
+                    if (callback) callback();
+                }, 300);
+            };
+        }
+
+        function addChatMessage(msg) {
+            const history = document.getElementById('chat-history');
+            const html = `
+                <div class="flex gap-3 fade-in">
+                    <div class="w-8 h-8 rounded-full bg-pastel-green text-white flex flex-shrink-0 items-center justify-center mt-1"><i class="fa-solid fa-cat"></i></div>
+                    <div class="bg-pastel-panel p-3 rounded-2xl rounded-tl-none text-sm relative chat-bubble">
+                        ${msg}
+                    </div>
+                </div>
+            `;
+            history.insertAdjacentHTML('beforeend', html);
+            
+            // 새 메시지(힌트) 추가 시, 스크롤을 방금 추가된 메시지 위치로 부드럽게 내림
+            setTimeout(() => {
+                const lastMessage = history.lastElementChild;
+                if (lastMessage) {
+                    lastMessage.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                }
+            }, 50);
+        }
+
+        // --- STREAMING_CHUNK:Defining Game Levels and Logic... ---
+        
+        let currentLevel = 0;
+        let hintClickCount = 0;
+        let levelState = {}; // 레벨별 임시 상태 저장
+
+        const levels = [
+            // Level 1: Basics (IF/ELSE)
+            {
+                title: "블랙박스 열어보기",
+                desc: "조건문과 변수의 이해",
+                hints: [
+                    "자판기에 아무 숫자나 넣어보고 우측 코드 창의 변화를 살펴봐!",
+                    "코드 안에 흐릿하게 보이는 글자가 있지? 마우스를 올려봐 (X-Ray 투시!).",
+                    "만약(if) 입력값(input)이 '50'과 같다면 문이 열릴 거야!"
+                ],
+                renderTarget: () => `
+                    <div class="text-center w-full">
+                        <i class="fa-solid fa-box-archive text-6xl text-pastel-text mb-4"></i>
+                        <h3 class="font-bold mb-4">비밀 상자</h3>
+                        <div class="flex gap-2">
+                            <input type="number" id="l1-input" class="w-full px-4 py-2 rounded-xl border-2 border-gray-200 outline-none focus:border-pastel-green text-center" placeholder="동전 무게(g) 입력">
+                            <button id="l1-btn" class="px-4 py-2 bg-pastel-text text-white rounded-xl font-bold hover:bg-gray-700">작동</button>
+                        </div>
+                    </div>
+                `,
+                renderCode: () => `
+<span class="text-pastel-blue">function</span> <span class="text-pastel-green">unlockBox</span>(inputWeight) {
+    <span class="text-gray-500">// 보안 모듈 초기화</span>
+    init_security_check();
+
+    <span class="text-pastel-blue">if</span> (inputWeight == <span class="xray-blur text-yellow-300" title="마우스를 올려 투시하세요">50</span>) {
+        <span class="text-pastel-green">return</span> <span class="text-yellow-300">"SUCCESS"</span>;
+    } <span class="text-pastel-blue">else</span> {
+        <span class="text-pastel-red">throw</span> Error(<span class="text-yellow-300">"무게가 일치하지 않습니다."</span>);
+    }
+}`
+                ,
+                initLogic: () => {
+                    document.getElementById('l1-btn').onclick = () => {
+                        const val = document.getElementById('l1-input').value;
+                        if (val === '50') {
+                            showModal("성공!", "정확합니다! 소스 코드 안에 하드코딩된 조건값을 찾아냈군요.<br>이것이 리버싱의 가장 기초적인 접근입니다.", "success", nextLevel);
+                        } else {
+                            showModal("오류 발생", "상자가 열리지 않습니다. 디버거 창에서 조건문을 다시 확인해 보세요.", "error");
+                        }
+                    };
+                }
+            },
+            // Level 2: Strings
+            {
+                title: "숨겨진 비밀번호",
+                desc: "메모리 내 문자열(Strings) 탐색",
+                hints: [
+                    "암호를 모르겠다고? 프로그램 안에는 개발자가 적어둔 글자(String)들이 어딘가에 남아있기 마련이야.",
+                    "X-Ray 창을 봐. 수많은 쓸모없는(더미) 데이터들 사이에 뭔가 읽을 수 있는 영단어가 보이지 않아?",
+                    "정답은 저기 눈에 띄는 노란색 문자열 <b>'Sweet_Coffee'</b>야. 그대로 입력해봐!"
+                ],
+                renderTarget: () => `
+                    <div class="text-center w-full">
+                        <i class="fa-solid fa-book-lock text-6xl text-pastel-text mb-4"></i>
+                        <h3 class="font-bold mb-4">비밀 일기장</h3>
+                        <div class="flex flex-col gap-2">
+                            <input type="text" id="l2-input" class="w-full px-4 py-2 rounded-xl border-2 border-gray-200 outline-none focus:border-pastel-green text-center" placeholder="Password">
+                            <button id="l2-btn" class="w-full px-4 py-2 bg-pastel-text text-white rounded-xl font-bold hover:bg-gray-700">잠금 해제</button>
+                        </div>
+                    </div>
+                `,
+                renderCode: () => `
+<span class="text-gray-500">--------- MEMORY DUMP ---------</span>
+0x004010A0: 4A 6F 79 00 <span class="text-gray-400">Joy.</span>
+0x004010A4: FF A1 B2 48 <span class="text-gray-400">...H</span>
+0x004010A8: 65 6C 6C 6F <span class="text-gray-400">ello</span>
+0x004010AC: 00 00 00 00 <span class="text-gray-400">....</span>
+0x004010B0: <span class="text-yellow-300 font-bold">53 77 65 65</span> <span class="text-yellow-300">Swee</span>
+0x004010B4: <span class="text-yellow-300 font-bold">74 5F 43 6F</span> <span class="text-yellow-300">t_Co</span>
+0x004010B8: <span class="text-yellow-300 font-bold">66 66 65 65</span> <span class="text-yellow-300">ffee</span>
+0x004010BC: 00 00 00 00 <span class="text-gray-400">....</span>
+0x004010C0: 44 75 6D 70 <span class="text-gray-400">Dump</span>
+<span class="text-gray-500">-------------------------------</span>`
+                ,
+                initLogic: () => {
+                    document.getElementById('l2-btn').onclick = () => {
+                        const val = document.getElementById('l2-input').value;
+                        if (val === 'Sweet_Coffee') {
+                            showModal("성공!", "훌륭해요! 메모리나 바이너리 파일 속에 숨겨진 문자열(String)을 추출하는 것은 해커들의 필수 스킬입니다.", "success", nextLevel);
+                        } else {
+                            showModal("접근 거부", "비밀번호가 틀렸습니다. 메모리 덤프 창에 사람의 눈으로 읽을 수 있는 글자(ASCII)가 있는지 찾아보세요.", "error");
+                        }
+                    };
+                }
+            },
+            // Level 3: Patching (JMP/NOP)
+            {
+                title: "거짓말쟁이 스위치",
+                desc: "분기문(Jump) 조작과 바이트 패치",
+                hints: [
+                    "암호를 모르니 정상적인 방법으로는 통과할 수 없어. 코드를 직접 '조작'해야 해.",
+                    "오른쪽 어셈블리 코드를 봐. 비밀번호가 틀리면(JNZ) '에러'로 이동하게 되어있어.",
+                    "JNZ(다르면 점프) 글자를 클릭해봐! 코드가 NOP(아무것도 안 함)으로 변해서, 에러 역으로 가지 않고 무조건 성공 역으로 직진하게 될 거야!"
+                ],
+                renderTarget: () => `
+                    <div class="text-center w-full">
+                        <i class="fa-solid fa-train-tram text-5xl text-pastel-text mb-4 relative" id="train-icon"></i>
+                        <h3 class="font-bold mb-4">데이터 기차</h3>
+                        
+                        <div class="flex justify-center items-center gap-4 mb-4 font-mono text-sm">
+                            <div class="bg-gray-200 px-3 py-1 rounded">START</div>
+                            <i class="fa-solid fa-arrow-right text-gray-400"></i>
+                            <div id="path-switch" class="bg-pastel-red text-white px-3 py-1 rounded transition-colors">ERROR</div>
+                        </div>
+
+                        <button id="l3-btn" class="px-6 py-2 bg-pastel-blue text-white rounded-xl font-bold hover:bg-blue-400">기차 출발</button>
+                    </div>
+                `,
+                renderCode: () => `
+<span class="text-gray-500">; 암호 검증 함수</span>
+0x080484A2: CMP EAX, EBX    <span class="text-gray-500">; 입력값과 정답 비교</span>
+0x080484A4: <button id="patch-btn" class="bg-white/20 hover:bg-white/40 px-1 rounded transition-colors text-pastel-red font-bold" title="클릭하여 패치(Patch)하기">JNZ</button> 0x080484F0  <span class="text-gray-500">; 다르면(JNZ) 에러로 점프!</span>
+0x080484A6: CALL 0x08048500 <span class="text-gray-500">; 성공 함수 호출</span>
+0x080484AB: RET
+
+<span class="text-pastel-red">0x080484F0 (Error_Path):</span>
+0x080484F0: PUSH "Access Denied"
+0x080484F5: CALL print_error
+`
+                ,
+                initLogic: () => {
+                    levelState.patched = false;
+                    const patchBtn = document.getElementById('patch-btn');
+                    const pathSwitch = document.getElementById('path-switch');
+                    
+                    patchBtn.onclick = () => {
+                        if (!levelState.patched) {
+                            levelState.patched = true;
+                            patchBtn.innerText = "NOP";
+                            patchBtn.className = "bg-pastel-green/20 px-1 rounded text-pastel-green font-bold";
+                            patchBtn.title = "No Operation (아무것도 안함)";
+                            
+                            // UI Update
+                            pathSwitch.className = "bg-pastel-green text-white px-3 py-1 rounded transition-colors";
+                            pathSwitch.innerText = "SUCCESS";
+                            
+                            addChatMessage("오! 코드 명령어를 NOP(No Operation)으로 덮어썼어. 이제 에러 검증을 무시하고 지나갈 거야!");
+                        }
+                    };
+
+                    document.getElementById('l3-btn').onclick = () => {
+                        const train = document.getElementById('train-icon');
+                        train.style.transform = "translateX(50px)";
+                        train.style.transition = "transform 0.5s ease-in-out";
+                        
+                        setTimeout(() => {
+                            train.style.transform = "translateX(0)";
+                            if (levelState.patched) {
+                                showModal("성공!", "완벽해요! 프로그램의 논리 흐름(Jump)을 임의로 변경하여 우회하는 기법(Patching)을 마스터했습니다.", "success", nextLevel);
+                            } else {
+                                showModal("접근 거부", "기차가 Error 경로로 빠졌습니다. 코드 창에서 빨간색 분기문(JNZ) 버튼을 눌러 로직을 조작해 보세요.", "error");
+                            }
+                        }, 500);
+                    };
+                }
+            },
+            {
+                title: "컨베이어의 비밀",
+                desc: "레지스터(Register)와 기본 연산",
+                hints: [
+                    "레지스터(RAX)는 CPU 안의 작은 임시 저장 바구니야.",
+                    "우리가 찾는 건 [최종 결과가 100이 되기 위해 처음에 넣어야 할 값(Input)]이야.",
+                    "코드를 거꾸로(Reverse) 계산해봐. 어떤 숫자에 45를 더하고(ADD) 5를 뺐더니(SUB) 100이 된대. 그럼 시작 숫자는 뭘까? (정답: 60)"
+                ],
+                renderTarget: () => `
+                    <div class="text-center w-full">
+                        <div class="flex justify-between items-center bg-gray-100 p-4 rounded-xl mb-4 font-mono">
+                            <div class="flex flex-col items-center">
+                                <span class="text-xs text-gray-500 mb-1">INPUT</span>
+                                <input type="number" id="l4-input" class="w-16 h-12 text-center rounded border-2 focus:border-pastel-green outline-none font-bold text-lg" value="0">
+                            </div>
+                            <i class="fa-solid fa-arrow-right-arrow-left text-pastel-blue"></i>
+                            <div class="flex flex-col items-center">
+                                <span class="text-xs text-gray-500 mb-1">RAX (Target: 100)</span>
+                                <div class="w-16 h-12 bg-gray-800 text-pastel-green flex items-center justify-center rounded font-bold text-lg" id="l4-rax">0</div>
+                            </div>
+                        </div>
+                        <button id="l4-btn" class="px-6 py-2 bg-pastel-text text-white rounded-xl font-bold hover:bg-gray-700 w-full">계산 실행 (RUN)</button>
+                    </div>
+                `,
+                renderCode: () => `
+<span class="text-gray-500">; 수학 연산 루틴</span>
+MOV RAX, [INPUT]   <span class="text-gray-500">; 입력값을 RAX에 넣는다</span>
+ADD RAX, 45        <span class="text-gray-500">; RAX = RAX + 45</span>
+SUB RAX, 5         <span class="text-gray-500">; RAX = RAX - 5</span>
+
+CMP RAX, 100       <span class="text-gray-500">; 결과가 100과 같은가?</span>
+JE  Success        <span class="text-gray-500">; 같으면 성공!</span>
+`
+                ,
+                initLogic: () => {
+                    document.getElementById('l4-btn').onclick = () => {
+                        const inputVal = parseInt(document.getElementById('l4-input').value) || 0;
+                        let rax = inputVal;
+                        rax += 45;
+                        rax -= 5;
+                        
+                        document.getElementById('l4-rax').innerText = rax;
+                        document.getElementById('l4-rax').classList.add('pulse-soft');
+                        setTimeout(() => document.getElementById('l4-rax').classList.remove('pulse-soft'), 500);
+
+                        if (rax === 100) {
+                            setTimeout(() => {
+                                showModal("성공!", "어셈블리 연산을 역추적해 올바른 입력값을 찾아냈군요!<br>실제 악성코드나 키젠(Keygen) 분석 시 이런 역연산이 많이 사용됩니다.", "success", nextLevel);
+                            }, 300);
+                        } else {
+                            setTimeout(() => {
+                                showModal("결과 불일치", `최종 RAX 값이 ${rax}이(가) 되었습니다. 타겟은 100입니다. 연산을 거꾸로 다시 계산해보세요.`, "error");
+                            }, 300);
+                        }
+                    };
+                }
+            },
+            {
+                title: "마스터 디버거",
+                desc: "중단점(Breakpoint)과 실시간 메모리 조작",
+                hints: [
+                    "최종 보스야! 숫자가 너무 빨리 지나가서 입력할 수가 없지?",
+                    "이럴 땐 디버거의 '일시정지(Pause)' 버튼을 눌러서 시간을 멈춰버려! 이것이 중단점(Breakpoint)이야.",
+                    "시간을 멈춘 상태에서 변수 상자를 클릭해봐. 코드가 원하는 Target(777) 값으로 몰래 바꾼 뒤 재생(Play) 버튼을 누르면 끝!"
+                ],
+                renderTarget: () => `
+                    <div class="text-center w-full">
+                        <i class="fa-solid fa-vault text-6xl text-pastel-text mb-4 transition-transform duration-100" id="vault-icon"></i>
+                        <h3 class="font-bold mb-4">보안 금고</h3>
+                        
+                        <div class="bg-gray-800 p-4 rounded-xl font-mono text-center flex flex-col items-center">
+                            <span class="text-pastel-blue text-xs mb-1">current_key (Memory)</span>
+                            <!-- 입력창: 평소엔 readonly, 일시정지시에만 입력 가능 -->
+                            <input type="number" id="l5-current" class="w-24 bg-black text-pastel-green text-2xl text-center rounded outline-none border border-gray-600" value="0" readonly>
+                            <span class="text-xs text-gray-400 mt-2">Target Key: <span class="text-yellow-300">777</span></span>
+                        </div>
+                    </div>
+                `,
+                renderCode: () => `
+<span class="text-pastel-blue">while</span> (<span class="text-pastel-blue">true</span>) {
+    current_key = generate_random();
+    
+    <span class="text-gray-500">// 매우 빠르게 검사하여 조작 불가</span>
+    <span class="text-pastel-blue">if</span> (current_key == 777) {
+        vault.open();
+    }
+}
+<span class="text-gray-500 mt-4 block">>>> 디버거 컨트롤러가 하단에 활성화되었습니다.</span>
+`
+                ,
+                initLogic: () => {
+                    // Show debugger controls
+                    document.getElementById('debugger-controls').classList.remove('hidden');
+                    
+                    levelState.isPaused = false;
+                    levelState.keyVal = 0;
+                    levelState.animFrame = null;
+                    const inputEl = document.getElementById('l5-current');
+                    const vaultIcon = document.getElementById('vault-icon');
+
+                    const loop = () => {
+                        if (!levelState.isPaused) {
+                            levelState.keyVal = Math.floor(Math.random() * 999);
+                            inputEl.value = levelState.keyVal;
+                            vaultIcon.style.transform = `rotate(${levelState.keyVal % 10 - 5}deg)`;
+                        }
+                        levelState.animFrame = requestAnimationFrame(loop);
+                    };
+                    loop(); // start spin
+
+                    document.getElementById('btn-pause').onclick = () => {
+                        levelState.isPaused = true;
+                        inputEl.removeAttribute('readonly');
+                        inputEl.classList.add('border-pastel-green', 'bg-gray-900');
+                        addChatMessage("시간 정지(Breakpoint)! 지금 변수 상자 안의 숫자를 지우고 777로 바꾼 뒤 플레이(▶)를 눌러봐!");
+                    };
+                    
+                    document.getElementById('btn-step').onclick = () => {
+                        if (levelState.isPaused) {
+                            levelState.keyVal = Math.floor(Math.random() * 999);
+                            inputEl.value = levelState.keyVal;
+                        }
+                    };
+
+                    document.getElementById('btn-play').onclick = () => {
+                        levelState.isPaused = false;
+                        inputEl.setAttribute('readonly', true);
+                        inputEl.classList.remove('border-pastel-green', 'bg-gray-900');
+                        
+                        // Check win condition instantly upon resume
+                        if (parseInt(inputEl.value) === 777) {
+                            cancelAnimationFrame(levelState.animFrame);
+                            vaultIcon.style.transform = "rotate(0deg)";
+                            vaultIcon.className = "fa-solid fa-door-open text-6xl text-pastel-green mb-4";
+                            
+                            setTimeout(() => {
+                                showModal("게임 클리어!", "축하합니다! 프로그램을 일시정지하고 메모리를 런타임에 변조하는 최고급 기술을 성공시켰습니다.<br><br><b>당신은 진정한 Lo-Fi 디버거입니다!</b>", "success", () => {
+                                    addChatMessage("모든 스테이지 클리어! 정말 대단해. 이제 넌 리버싱의 기초를 완벽히 이해했어. 수고했어! ☕");
+                                });
+                            }, 500);
+                        } else {
+                            addChatMessage("앗, 777이 아니었나봐. 다시 멈춰서 조작해보자.");
+                        }
+                    };
+                }
+            }
+        ];
+
+        // --- STREAMING_CHUNK:Main Game Engine Functions... ---
+
+        function updateIndicators() {
+            const container = document.getElementById('level-indicators');
+            container.innerHTML = '';
+            for(let i = 0; i < levels.length; i++) {
+                const isActive = i === currentLevel;
+                const isPassed = i < currentLevel;
+                let colorClass = "bg-gray-200 text-gray-400";
+                if (isActive) colorClass = "bg-pastel-blue text-white ring-2 ring-pastel-blue ring-offset-2";
+                if (isPassed) colorClass = "bg-pastel-green text-white";
+                
+                container.innerHTML += `<div class="w-6 h-6 rounded-full ${colorClass} text-[10px] font-bold flex items-center justify-center shadow-sm">${i+1}</div>`;
+            }
+        }
+
+        function loadLevel(idx) {
+            // Clean up previous level state (e.g., animations)
+            if (levelState.animFrame) cancelAnimationFrame(levelState.animFrame);
+            levelState = {};
+            hintClickCount = 0;
+            
+            // hide debugger controls unless it's lvl 5
+            document.getElementById('debugger-controls').classList.add('hidden');
+
+            const level = levels[idx];
+            updateIndicators();
+            
+            // Render UI
+            const targetEl = document.getElementById('target-viewport');
+            targetEl.innerHTML = level.renderTarget();
+            // Add tiny level title in target
+            targetEl.innerHTML = `<div class="absolute top-2 left-3 text-xs font-bold text-gray-400">Stage ${idx+1}. ${level.title}</div>` + targetEl.innerHTML;
+            
+            document.getElementById('debugger-viewport').innerHTML = level.renderCode();
+            
+            // Bot message
+            setTimeout(() => {
+                addChatMessage(`<b>[Stage ${idx+1} : ${level.title}]</b><br>${level.desc}에 대해 배워볼 시간이야.`);
+            }, 300);
+
+            // Init Logic
+            level.initLogic();
+        }
+
+        function nextLevel() {
+            if (currentLevel < levels.length - 1) {
+                currentLevel++;
+                loadLevel(currentLevel);
+            }
+        }
+
+        // 힌트 시스템
+        document.getElementById('btn-hint').addEventListener('click', () => {
+            const hints = levels[currentLevel].hints;
+            if (hintClickCount < hints.length) {
+                addChatMessage(hints[hintClickCount]);
+                hintClickCount++;
+            } else {
+                addChatMessage("더 이상 줄 힌트가 없어! 방금 알려준 내용을 다시 곰곰이 생각해봐!");
+            }
+        });
+
+        // Initialize Game
+        window.onload = () => {
+            loadLevel(0);
+        };
+
+    </script>
+</body>
+</html>
